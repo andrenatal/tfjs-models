@@ -15,10 +15,10 @@
  * =============================================================================
  */
 
-import {Tensor3D} from '@tensorflow/tfjs-core';
+import { Tensor3D } from '@tensorflow/tfjs-core';
 
-export type PixelInput = Tensor3D|ImageData|HTMLVideoElement|HTMLImageElement|
-    HTMLCanvasElement|ImageBitmap;
+export type PixelInput = Tensor3D | ImageData | HTMLVideoElement | HTMLImageElement |
+  HTMLCanvasElement | ImageBitmap;
 
 export interface InputResolution {
   width: number;
@@ -60,13 +60,13 @@ export interface WindowElement {
 
 export interface KeypointsFilter {
   apply(landmarks: Keypoint[], microSeconds: number, objectScale: number):
-      Keypoint[];
+    Keypoint[];
   reset(): void;
 }
 
 export interface Mask {
   toCanvasImageSource():
-      Promise<CanvasImageSource>; /* RGBA image of same size as input, where
+    Promise<CanvasImageSource>; /* RGBA image of same size as input, where
                             mask semantics are green and blue are always set to
                             0. Different red values denote different body
                             parts(see maskValueToBodyPart explanation below).
@@ -75,7 +75,7 @@ export interface Mask {
                             probability and 255 being highest).*/
 
   toImageData():
-      Promise<ImageData>; /* 1 dimensional array of size image width * height *
+    Promise<ImageData>; /* 1 dimensional array of size image width * height *
                     4, where each pixel is represented by RGBA in that order.
                     For each pixel, the semantics are green and blue are always
                     set to 0, and different red values denote different body
@@ -85,21 +85,21 @@ export interface Mask {
                     highest). */
 
   toTensor():
-      Promise<Tensor3D>; /* RGBA image of same size as input, where mask
+    Promise<Tensor3D>; /* RGBA image of same size as input, where mask
                    semantics are green and blue are always set to 0. Different
                    red values denote different body parts (see
                    maskValueToBodyPart explanation below). Different alpha
                    values denote the probability of pixel being a foreground
                    pixel (0 being lowest probability and 255 being highest).*/
 
-  getUnderlyingType(): 'canvasimagesource'|'imagedata'|
-      'tensor'; /* determines which type the mask currently stores in its
+  getUnderlyingType(): 'canvasimagesource' | 'imagedata' |
+    'tensor'; /* determines which type the mask currently stores in its
                    implementation so that conversion can be avoided */
 }
 
 export interface Segmentation {
   maskValueToLabel: (maskValue: number) =>
-      string; /* Maps a foreground pixel’s red value to the segmented part name
+    string; /* Maps a foreground pixel’s red value to the segmented part name
                  of that pixel. Should throw error for unsupported input
                  values.*/
   mask: Mask;
