@@ -33,7 +33,6 @@ import { setupDatGui } from './option_panel';
 import { STATE } from './params';
 import { setBackendAndEnvFlags } from './util';
 import { keypointsToNormalizedKeypoints } from '../../../../shared/calculators/keypoints_to_normalized_keypoints';
-
 let detector, camera, stats;
 let startInferenceTime, numInferences = 0;
 let inferenceTimeSum = 0, lastPanelUpdate = 0;
@@ -58,6 +57,15 @@ let count_labels = 0;
 const INTERVAL_BETWEEN_SHOTS = 1;
 let last_shot_position = 0;
 let total_shots = [0, 0, 0, 0];
+let next_video = 0;
+const currentUrl = window.location.href;
+const detected_shot = document.getElementById('detected_shot');
+const reference_similarity = document.getElementById('reference_similarity');
+const total_backhands = document.getElementById('total_backhands');
+const total_forehands = document.getElementById('total_forehands');
+const total_serves = document.getElementById('total_serves');
+const score_classifier = document.getElementById('score_classifier');
+const total_neutral = document.getElementById('total_neutral');
 
 async function createDetector() {
   switch (STATE.model) {
@@ -226,9 +234,15 @@ function handleKeyDown(event) {
 async function updateVideo(event) {
   // Clear reference to any previous uploaded video.
   URL.revokeObjectURL(camera.video.currentSrc);
-  const file = event.target.files[0];
-  camera.source.src = URL.createObjectURL(file);
 
+  if (event.target.files) {
+    const file = event.target.files[0];
+    camera.source.src = URL.createObjectURL(file);
+  } else {
+    next_video++;
+    if (next_video == 6) next_video = 5;
+    camera.source.src = new URL(`/videos/${next_video}.mp4`, currentUrl).href;
+  }
   // Wait for video to be loaded.
   camera.video.load();
   await new Promise((resolve) => {
@@ -246,6 +260,7 @@ async function updateVideo(event) {
   camera.canvas.height = videoHeight;
 
   statusElement.innerHTML = 'Video is loaded.';
+  run();
 }
 /*  */
 async function runFrame() {
@@ -263,7 +278,7 @@ async function runFrame() {
 
 async function run() {
   statusElement.innerHTML = 'Warming up model.';
-
+  total_shots = [0, 0, 0, 0];
   // Warming up pipeline.
   const [runtime, $backend] = STATE.backend.split('-');
 
@@ -379,7 +394,7 @@ async function compute_distance_similiarity(poses) {
   //const tensor_tf = tensors.tensor_tf.reshape([1, 30, 26]);
 
   const prediction = classificationModel.predict(tensors.tensor_tf);
-  prediction.print();
+  //prediction.print();
   let predicted_class = tf.argMax(prediction, 1).dataSync()[0];
   let score = tf.max(prediction, 1).dataSync()[0] * 100
   let output_msg = "";
@@ -387,9 +402,9 @@ async function compute_distance_similiarity(poses) {
 
   if (pose_classes[predicted_class] !== "neutral" && score > score_threshold) {
     //output_msg = "Classifier output: " + pose_classes[predicted_class] + " with a score of " + score + "%";
-    output_msg = "Backhand: " + total_shots[0] + " - Forehand: " + total_shots[1] + " - Neutral: " + total_shots[2] + " - Serve: " + total_shots[3];
-    output_msg += "<br>Classifier output: " + pose_classes[predicted_class] + " with a score of " + score + "%";
-    document.getElementById('shot').innerHTML = output_msg;
+    //output_msg = "Backhand: " + total_shots[0] + " - Forehand: " + total_shots[1] + " - Neutral: " + total_shots[2] + " - Serve: " + total_shots[3];
+    //output_msg += "<br>Classifier output: " + pose_classes[predicted_class] + " with a score of " + score + "%";
+    //document.getElementById('shot').innerHTML = output_msg;
 
     //console.log(output_msg);
     const inputs = { input: tensors.tensor_onnx };
@@ -410,9 +425,16 @@ async function compute_distance_similiarity(poses) {
       return;
     }
 
-    const average_cosine_sim = math.mean(cosine_sim);
-    const sim_msg = `Similarity with Alcaraz ${pose_classes[predicted_class]}: ${average_cosine_sim}`;
-    document.getElementById('shotsimilarity').innerHTML = sim_msg;
+    const average_cosine_sim = (math.mean(cosine_sim) * 100).toFixed(3);
+    //const sim_msg = `Similarity with Alcaraz ${pose_classes[predicted_class]}: ${average_cosine_sim}`;
+    //document.getElementById('shotsimilarity').innerHTML = sim_msg;
+    reference_similarity.innerHTML = average_cosine_sim + " %";
+    detected_shot.innerHTML = pose_classes[predicted_class].toUpperCase();
+    score_classifier.innerHTML = score + " %";
+    total_backhands.innerHTML = total_shots[0];
+    total_forehands.innerHTML = total_shots[1];
+    total_neutral.innerHTML = total_shots[2];
+    total_serves.innerHTML = total_shots[3];
     //console.log("Average cosine similarity:", average_cosine_sim);
   }
 }
@@ -433,18 +455,17 @@ async function app() {
   await tf.ready();
   detector = await createDetector();
 
-  const runButton = document.getElementById('submit');
-  runButton.onclick = run;
-
   const uploadButton = document.getElementById('videofile');
   uploadButton.onchange = updateVideo;
-  (async () => {
+  await (async () => {
     const tfjsmodule = await import('@tensorflow/tfjs');
-    classificationModel = await tfjsmodule.loadLayersModel('http://192.168.191.203:3000/models/tfjs/classification/357/model.json');
-
+    classificationModel = await tfjsmodule.loadLayersModel('/models/tfjs/classification/357/model.json');
     // Use the module within this scope
     //console.log(tfjsmodule.version); // Example: Log TensorFlow.js version
+
   })();
+
+  console.log("Model loaded");
 
   const strideInput = document.getElementById('stride');
   strideInput.onchange = () => {
@@ -466,18 +487,22 @@ async function app() {
     }
   }
 
-  sessionSimilarityBackhand = await ort.InferenceSession.create('http://192.168.191.203:3000/models/onnx/backhandalcaraz003_encoder/model.onnx');
-  training_embeddings_backhand = await loadNpy('http://192.168.191.203:3000/models/movenet/embeddings/backhandalcaraz003.encoder.embeddings.npy');
+  const randomVideo = document.getElementById('startButton');
+  randomVideo.onclick = updateVideo;
 
-  sessionSimilarityForehand = await ort.InferenceSession.create('http://192.168.191.203:3000/models/onnx/forehandalcaraz003_encoder/model.onnx');
-  training_embeddings_forehand = await loadNpy('http://192.168.191.203:3000/models/movenet/embeddings/forehandalcaraz003.encoder.embeddings.npy');
+  sessionSimilarityBackhand = await ort.InferenceSession.create('/models/encoders/backhandalcaraz003_encoder/model.onnx');
+  training_embeddings_backhand = await loadNpy('/models/embeddings/backhandalcaraz003.encoder.embeddings.npy');
 
-  sessionSimilarityServe = await ort.InferenceSession.create('http://192.168.191.203:3000/models/onnx/servealcaraz003_encoder/model.onnx');
-  training_embeddings_serve = await loadNpy('http://192.168.191.203:3000/models/movenet/embeddings/servealcaraz003.encoder.embeddings.npy');
+  sessionSimilarityForehand = await ort.InferenceSession.create('/models/encoders/forehandalcaraz003_encoder/model.onnx');
+  training_embeddings_forehand = await loadNpy('/models/embeddings/forehandalcaraz003.encoder.embeddings.npy');
+
+  sessionSimilarityServe = await ort.InferenceSession.create('/models/encoders/servealcaraz003_encoder/model.onnx');
+  training_embeddings_serve = await loadNpy('/models/embeddings/servealcaraz003.encoder.embeddings.npy');
 
   // Add the keydown event listener
   document.addEventListener('keydown', handleKeyDown);
 
+  // load random video
 };
 
 app();
